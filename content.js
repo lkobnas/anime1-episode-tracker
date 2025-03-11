@@ -45,29 +45,29 @@
                 let isPlaying = videoPlayer.classList.contains("vjs-playing");
                 let status = isPlaying ? "Playing" : "Paused";
                 console.log(`Status: ${status}`);
+                if (status === "Playing") {
+                    titleElement = article.querySelector("header h2 a");
+                    console.log(titleElement.textContent);
+                    remainingTimeElement = article.querySelector(".vjs-remaining-time-display");
+    
+                    if (titleElement) {// && remainingTimeElement) {
+                        let titleText = titleElement.textContent.trim();
+                        let match = titleText.match(/(.+?)\s*\[(\d+)\]/);
+                        let remainingTime = remainingTimeElement.textContent.trim();
+            
+                        if (match) {
+                            let title = match[1];
+                            let episode = match[2];
+            
+                            console.log(`Detected: ${title} - [${episode}], Remaining Time: ${remainingTime}`);
+                            saveLastWatched(title, episode, remainingTime);
+                        }
+                    }
+    
+                }
             });
     
             observer.observe(videoPlayer, { attributes: true, attributeFilter: ["class"] });
-
-            if (status === "Playing") {
-                titleElement = article.querySelector("header h2 a");
-                remainingTimeElement = article.querySelector(".vjs-remaining-time-display");
-
-                if (titleElement && remainingTimeElement) {
-                    let titleText = titleElement.textContent.trim();
-                    let match = titleText.match(/(.+?)\s*\[(\d+)\]/);
-                    let remainingTime = remainingTimeElement.textContent.trim();
-        
-                    if (match) {
-                        let title = match[1];
-                        let episode = match[2];
-        
-                        console.log(`Detected: ${title} - [${episode}], Remaining Time: ${remainingTime}`);
-                        saveLastWatched(title, episode, remainingTime);
-                    }
-                }
-
-            }
         });
 
     }
