@@ -1,0 +1,18 @@
+{
+    "manifest_version": 3,
+    "name": "Last Watched Episode Tracker",
+    "version": "1.0",
+    "description": "Tracks the last watched episode on a website.",
+    "permissions": ["storage"],
+    "host_permissions": ["*://anime1.me/*"], 
+    "content_scripts": [
+      {
+        "matches": ["*://anime1.me/*"], 
+        "js": ["content.js"]
+      }
+    ],
+    "action": {
+      "default_popup": "popup.html"
+    }
+  }
+  
