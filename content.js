@@ -149,4 +149,18 @@
     // Run every 5 seconds to check which episode is being watched
     setInterval(findCurrentEpisode, 5000);
 
+    // Add this message listener near the top of your IIFE
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        if (request.action === "showNotification") {
+            const urlPath = window.location.pathname;
+            const animeId = urlPath.split('/').filter(segment => segment).pop();
+
+            chrome.storage.local.get('animeData', (result) => {
+                if (result.animeData && result.animeData[animeId]) {
+                    showNotification(result.animeData[animeId]);
+                }
+            });
+        }
+    });
+
 })();
