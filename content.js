@@ -102,6 +102,52 @@
                     
                     // Show a notification popup
                     showNotification(savedData);
+
+                    // Find and click the video player
+                    const videoContainer = article.querySelector(".video-js");
+                    if (videoContainer) {
+                        // Click to start loading the video
+                        videoContainer.click();
+
+                        // Wait for 5 seconds to ensure video and controls are loaded
+                        setTimeout(() => {
+                            try {
+                                const videoElement = videoContainer.querySelector('video');
+                                if (!videoElement) {
+                                    console.error('Video element not found');
+                                    return;
+                                }
+
+                                // Convert remaining time to seconds
+                                const remainingParts = savedData.remainingTime.split(':');
+                                const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
+                                
+                                // Wait for duration to be available
+                                const checkDuration = setInterval(() => {
+                                    const duration = videoElement.duration;
+                                    if (duration && !isNaN(duration)) {
+                                        clearInterval(checkDuration);
+                                        
+                                        // Calculate the target time
+                                        const targetTime = Math.max(0, duration - remainingSeconds);
+                                        
+                                        // Set the video time
+                                        videoElement.currentTime = targetTime;
+
+                                        console.log(`Seeking to ${targetTime} seconds (${duration} - ${remainingSeconds})`);
+                                    }
+                                }, 500); // Check every 500ms
+
+                                // Stop checking after 10 seconds to prevent infinite loop
+                                setTimeout(() => {
+                                    clearInterval(checkDuration);
+                                }, 10000);
+
+                            } catch (error) {
+                                console.error('Error setting video time:', error);
+                            }
+                        }, 5000); // 5 second delay
+                    }
                 }
             });
         });
