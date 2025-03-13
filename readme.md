@@ -1,31 +1,3 @@
-# 🎥 Anime1 Episode Tracker  
-
-A Chrome extension that **tracks the last episode you watched** on a website and automatically seeks to the correct position when you revisit. Never lose track of your progress again!  
-
-## ✨ Features  
-✅ **Detects the last watched episode** and saves it automatically  
-✅ **Remembers the remaining time** so you can resume playback seamlessly  
-✅ **Highlights the last watched episode** on the page  
-✅ **Works automatically in the background**  
-
-## 📦 Installation  
-
-1. **Clone the repository**  
-   ```bash
-   git clone https://github.com/lkobnas/anime1-episode-tracker
-   ```
-2. **Enable Developer Mode in Chrome**
-- Open Chrome and go to chrome://extensions/
-- Enable Developer Mode (toggle in the top right corner)
-
-3. **Load the extension**
-- Click "Load unpacked"
-- Select the cloned folder
-
-4. **Done!** 🎉 The extension should now be active in Chrome. Refresh.
-
-
-
 # 🎥 上次睇到邊？- Anime1最近觀看集數追蹤器  
 
 依款擴展係比鐘意同時追多套番，但又唔記得自己睇到邊嘅你用。佢會**自動記錄你上次睇嘅集數同時間**，喺你重新載入嘅時候 **自動跳轉到上次離開嘅位置**，唔洗你再慢慢回憶~
@@ -52,3 +24,36 @@ A Chrome extension that **tracks the last episode you watched** on a website and
         選擇剛剛下載的資料夾
 
 4. **完成！**🎉 搞掂，重新載入就得
+
+
+
+
+
+
+
+
+# 🎥 Anime1 Episode Tracker  
+
+A Chrome extension that **tracks the last episode you watched** on a website and automatically seeks to the correct position when you revisit. Never lose track of your progress again!  
+
+## ✨ Features  
+✅ **Detects the last watched episode** and saves it automatically  
+✅ **Remembers the remaining time** so you can resume playback seamlessly  
+✅ **Highlights the last watched episode** on the page  
+✅ **Works automatically in the background**  
+
+## 📦 Installation  
+
+1. **Clone the repository**  
+   ```bash
+   git clone https://github.com/lkobnas/anime1-episode-tracker
+   ```
+2. **Enable Developer Mode in Chrome**
+- Open Chrome and go to chrome://extensions/
+- Enable Developer Mode (toggle in the top right corner)
+
+3. **Load the extension**
+- Click "Load unpacked"
+- Select the cloned folder
+
+4. **Done!** 🎉 The extension should now be active in Chrome. Refresh.
