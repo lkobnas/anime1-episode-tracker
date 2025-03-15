@@ -1,4 +1,19 @@
 document.addEventListener("DOMContentLoaded", function () {
+    // Load settings
+    chrome.storage.local.get(['autoPlay', 'autoNextEpisode'], function(settings) {
+        document.getElementById('autoPlay').checked = settings.autoPlay || false;
+        document.getElementById('autoNextEpisode').checked = settings.autoNextEpisode || false;
+    });
+
+    // Add event listeners for checkboxes
+    document.getElementById('autoPlay').addEventListener('change', function(e) {
+        chrome.storage.local.set({ autoPlay: e.target.checked });
+    });
+
+    document.getElementById('autoNextEpisode').addEventListener('change', function(e) {
+        chrome.storage.local.set({ autoNextEpisode: e.target.checked });
+    });
+
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         // Get the current URL and extract the anime ID
         const url = new URL(tabs[0].url);
