@@ -11,7 +11,15 @@
         };
     }
 
+    let lastSaved = { title: "", episode: "", remainingTime: "" };
+    
     function saveLastWatched(title, episode, remainingTime) {
+
+        if (lastSaved.title === title && lastSaved.episode === episode && lastSaved.remainingTime === remainingTime) {
+            return; // Avoid duplicate saves
+        }
+        lastSaved = { title, episode, remainingTime };
+
         // Get the anime identifier from the URL path
         const urlPath = window.location.pathname;
         const animeId = urlPath.split('/').filter(segment => segment).pop();
@@ -35,8 +43,6 @@
         });
     }
 
-    let previousState = null;
-
     function findCurrentEpisode() {
 
         let articles = document.querySelectorAll("article");
@@ -49,10 +55,10 @@
             if (!videoPlayer) return;
     
             let debouncedCallback = debounce(() => {
-                let isPlaying = videoPlayer.classList.contains("vjs-playing");
-                let status = isPlaying ? "Playing" : "Paused";
-                //console.log(`Status: ${status}`);
-                if (status === "Playing") {
+                let isPlaying = (videoPlayer.classList.contains("vjs-playing") && videoPlayer.classList.contains("vjs-has-started"));
+                let justPaused = videoPlayer.classList.contains("vjs-paused") && videoPlayer.classList.contains("vjs-user-active");
+
+                if (isPlaying || justPaused) {
                     titleElement = article.querySelector("header h2 a");
                     console.log(titleElement.textContent);
                     remainingTimeElement = article.querySelector(".vjs-remaining-time-display");
@@ -71,6 +77,8 @@
                         }
                     }
                 }
+
+
             }, 1000); 
     
             let observer = new MutationObserver(debouncedCallback);
@@ -189,8 +197,8 @@
         scrollToSavedEpisode();
     }
 
-    // Run every 5 seconds to check which episode is being watched
-    setInterval(findCurrentEpisode, 5000);
+    // Run every 2 seconds to check which episode is being watched
+    setInterval(findCurrentEpisode, 2000);
 
     // Add this message listener near the top of your IIFE
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
