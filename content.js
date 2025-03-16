@@ -73,6 +73,50 @@
                             let episode = match[2];
             
                             console.log(`Detected: ${title} - [${episode}], Remaining Time: ${remainingTime}`);
+
+                            // Convert remaining time (M:SS format) to seconds
+                            const remainingParts = remainingTime.split(':');
+                            const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
+
+                            // Handle auto next episode
+                            if (remainingSeconds <= 95 && justPaused && remainingSeconds != 0) { // 1:35 in seconds
+                                chrome.storage.local.get(['autoNextEpisode'], function(settings) {
+                                    if (settings.autoNextEpisode) {
+                                        nextEpisode = String(parseInt(episode) + 1);
+                                        const articles = document.querySelectorAll("article");
+                                        let found = false;
+                                        
+                                        // Using for...of instead of forEach to allow breaking
+                                        for (const article of articles) {
+                                            if (found) break;
+
+                                            const titleElement = article.querySelector("header h2 a");
+                                            if (!titleElement) continue;
+
+                                            const match = titleElement.textContent.trim().match(/(.+?)\s*\[(\d+)\]/);
+                                            if (match && match[2] === nextEpisode) {
+                                                console.log(`Auto next episode found: ${nextEpisode}`);
+                                                article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                                                // Find and click the video player
+                                                const videoContainer = article.querySelector(".video-js");
+                                                if (videoContainer) {
+                                                    // Click to start loading the video
+                                                    videoContainer.click();
+                                                    showNotificationText("播放下一集");
+                                                    found = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        
+                                        if (!found) {
+                                            showNotificationText("已經冇下集了");
+                                        }
+                                    }
+                                });
+                            }
+                            
                             saveLastWatched(title, episode, remainingTime);
                         }
                     }
@@ -96,6 +140,10 @@
 
             const savedData = result.animeData[animeId];
             const savedEpisode = savedData.episode;
+            const savedRemainingTime = savedData.remainingTime;
+            if (savedRemainingTime < 95) {
+                
+            }
 
             // Find the episode link that matches our saved episode
             const articles = document.querySelectorAll("article");
@@ -141,6 +189,14 @@
                                     videoElement.currentTime = targetTime;
 
                                     console.log(`Seeking to ${targetTime} seconds (${duration} - ${remainingSeconds})`);
+                                    
+                                    // Check autoPlay setting before pausing
+                                    chrome.storage.local.get(['autoPlay'], function(settings) {
+                                        if (!settings.autoPlay) {
+                                            videoElement.pause();
+                                        }
+                                    });
+
                                 }
                             }, 500); // Check every 500ms
 
@@ -177,6 +233,35 @@
             <div style="margin-bottom: 8px"><strong>你上次睇到:</strong></div>
             <div>第 ${savedData.episode} 集 </div>
             <div>剩返 ${savedData.remainingTime}</div>
+        `;
+
+        document.body.appendChild(notification);
+
+        // Remove the notification after 5 seconds
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transition = 'opacity 0.5s ease';
+            setTimeout(() => notification.remove(), 1000);
+        }, 7000);
+    }
+
+    function showNotificationText(text) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 9999;
+            font-family: Arial, sans-serif;
+            max-width: 300px;
+        `;
+
+        notification.innerHTML = `
+            <div style="margin-bottom: 8px"><strong>${text}</strong></div>
         `;
 
         document.body.appendChild(notification);

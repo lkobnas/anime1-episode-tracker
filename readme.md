@@ -8,6 +8,33 @@
 ✅ **自動標記上次觀看的集數**，方便查找  
 ✅ **背景自動運行**，無需手動操作  
 
+## 🎥 Demo
+
+<div style="display: flex; gap: 20px;">
+    <div>
+        <strong>主頁面</strong><br/>
+        <img src="/demo/popup.png" width="300"/>
+    </div>
+    <div>
+        <strong>提示</strong><br/>
+        <img src="/demo/notification.png" width="300"/>
+    </div>
+</div>
+
+<br>
+<br>
+
+**自動播放**
+
+![](/demo/autoplay.gif)
+
+<br>
+<br>
+
+**剩餘時間少於 1:35 時, 按暫停自動播放下一集**
+
+![](/demo/autoplay_next_episode.gif)
+
 ## 📦 安裝教學
 
 1. **下載擴展**  
@@ -24,7 +51,6 @@
         選擇剛剛下載的資料夾
 
 4. **完成！** 🎉 搞掂，重新載入就得
-
 
 
 
