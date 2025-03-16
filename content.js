@@ -79,19 +79,21 @@
                             const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
 
                             // Handle auto next episode
-                            if (remainingSeconds <= 95 && justPaused) { // 1:35 in seconds
+                            if (remainingSeconds <= 95 && justPaused && remainingSeconds != 0) { // 1:35 in seconds
                                 chrome.storage.local.get(['autoNextEpisode'], function(settings) {
                                     if (settings.autoNextEpisode) {
                                         nextEpisode = String(parseInt(episode) + 1);
                                         const articles = document.querySelectorAll("article");
                                         let found = false;
-                                        articles.forEach(article => {
+                                        
+                                        // Using for...of instead of forEach to allow breaking
+                                        for (const article of articles) {
+                                            if (found) break;
 
                                             const titleElement = article.querySelector("header h2 a");
+                                            if (!titleElement) continue;
 
-                                            if (!titleElement) return;
                                             const match = titleElement.textContent.trim().match(/(.+?)\s*\[(\d+)\]/);
-
                                             if (match && match[2] === nextEpisode) {
                                                 console.log(`Auto next episode found: ${nextEpisode}`);
                                                 article.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -101,15 +103,16 @@
                                                 if (videoContainer) {
                                                     // Click to start loading the video
                                                     videoContainer.click();
-                                                    // showNotificationText("播放下一集");
-                                                    // found = true;
-                                                    return;
+                                                    showNotificationText("播放下一集");
+                                                    found = true;
+                                                    break;
                                                 }
-                                            // } else if (!found) {
-                                            //     showNotificationText("已經冇下集了");
                                             }
-                                            
-                                        });                                        
+                                        }
+                                        
+                                        if (!found) {
+                                            showNotificationText("已經冇下集了");
+                                        }
                                     }
                                 });
                             }
