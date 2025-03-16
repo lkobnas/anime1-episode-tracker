@@ -52,15 +52,15 @@
 
 4. **完成！** 🎉 搞掂，重新載入就得
 
-
-
-
-
-
+<br>
+<br>
+<br>
+<br>
+<br>
 
 # 🎥 Anime1 Episode Tracker  
 
-A Chrome extension that **tracks the last episode you watched** on a website and automatically seeks to the correct position when you revisit. Never lose track of your progress again!  
+A Chrome extension that **tracks the last episode you watched** on Anime1.me and automatically seeks to the correct position when you revisit. Never lose track of your progress again!  
 
 ## ✨ Features  
 ✅ **Detects the last watched episode** and saves it automatically  
