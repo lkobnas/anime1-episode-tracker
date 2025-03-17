@@ -37,13 +37,21 @@
 
 ## 📦 安裝教學
 
-1. **下載擴展**  
+1. **下載擴展** 
+
+    **方法一：點擊[這裡下載](https://github.com/lkobnas/anime1-episode-tracker/archive/refs/heads/main.zip)並解壓**
+
+
+    ***or***
+
+
+    **方法二：使用 git clone**
    ```bash
    git clone https://github.com/lkobnas/anime1-episode-tracker
    ```
 
 2. **開啟 Chrome 開發者模式**
-    - 打開 Chrome，進入 chrome://extensions/
+    - 打開 Chrome，進入 [chrome://extensions/](chrome://extensions/)
     - 開啟 開發者模式（右上角切換按鈕）
 
 3. **載入擴展**
@@ -70,12 +78,20 @@ A Chrome extension that **tracks the last episode you watched** on Anime1.me and
 
 ## 📦 Installation  
 
-1. **Clone the repository**  
-   ```bash
-   git clone https://github.com/lkobnas/anime1-episode-tracker
-   ```
+1. **Download**
+
+    **Method 1 [Click here to download](https://github.com/lkobnas/anime1-episode-tracker/archive/refs/heads/main.zip) the repository and unzip**
+
+
+    ***or***
+
+
+    **Method 2：Clone the repository using Git**
+    ```bash
+    git clone https://github.com/lkobnas/anime1-episode-tracker
+    ```
 2. **Enable Developer Mode in Chrome**
-- Open Chrome and go to chrome://extensions/
+- Open Chrome and go to [chrome://extensions/](chrome://extensions/)
 - Enable Developer Mode (toggle in the top right corner)
 
 3. **Load the extension**
