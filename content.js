@@ -1,4 +1,15 @@
 (function () {
+    // Constants
+    const CONSTANTS = {
+        AUTO_NEXT_THRESHOLD: 95, // seconds
+        CHECK_INTERVAL: 2000,    // milliseconds
+        NOTIFICATION_DURATION: 7000,
+        NOTIFICATION_FADE_DURATION: 1000,
+        VIDEO_LOAD_CHECK_INTERVAL: 500,
+        VIDEO_LOAD_TIMEOUT: 10000
+    };
+
+    // Utility Functions
     function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -11,24 +22,80 @@
         };
     }
 
-    let lastSaved = { title: "", episode: "", remainingTime: "" };
-    
-    function saveLastWatched(title, episode, remainingTime) {
+    /**
+     * Gets anime ID from current URL
+     * @returns {string} The anime ID from the URL path
+     */
+    function getAnimeIdFromUrl() {
+        return window.location.pathname.split('/').filter(segment => segment).pop();
+    }
 
-        if (lastSaved.title === title && lastSaved.episode === episode && lastSaved.remainingTime === remainingTime) {
-            return; // Avoid duplicate saves
+    // UI Components
+    const NotificationUI = {
+        createNotificationElement: (styles) => {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 15px;
+                border-radius: 5px;
+                z-index: 9999;
+                font-family: Arial, sans-serif;
+                max-width: 300px;
+            `;
+            return notification;
+        },
+
+        showEpisodeNotification: (savedData) => {
+            const notification = NotificationUI.createNotificationElement();
+            notification.innerHTML = `
+                <div style="margin-bottom: 8px"><strong>你上次睇到:</strong></div>
+                <div>第 ${savedData.episode} 集 </div>
+                <div>剩返 ${savedData.remainingTime}</div>
+            `;
+            NotificationUI.showNotification(notification);
+        },
+
+        showTextNotification: (text) => {
+            const notification = NotificationUI.createNotificationElement();
+            notification.innerHTML = `
+                <div style="margin-bottom: 8px"><strong>${text}</strong></div>
+            `;
+            NotificationUI.showNotification(notification, 5000);
+        },
+
+        showNotification: (notification, duration = CONSTANTS.NOTIFICATION_DURATION) => {
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => notification.remove(), CONSTANTS.NOTIFICATION_FADE_DURATION);
+            }, duration);
         }
+    };
+
+    // State Management
+    let lastSaved = { title: "", episode: "", remainingTime: "" };
+
+    /**
+     * Saves the last watched episode data
+     */
+    function saveLastWatched(title, episode, remainingTime) {
+        // Avoid duplicate saves
+        if (lastSaved.title === title && 
+            lastSaved.episode === episode && 
+            lastSaved.remainingTime === remainingTime) {
+            return;
+        }
+
         lastSaved = { title, episode, remainingTime };
+        const animeId = getAnimeIdFromUrl();
 
-        // Get the anime identifier from the URL path
-        const urlPath = window.location.pathname;
-        const animeId = urlPath.split('/').filter(segment => segment).pop();
-
-        // First, get existing data
         chrome.storage.local.get('animeData', (result) => {
             let animeData = result.animeData || {};
-            
-            // Update or add new entry for this specific anime
             animeData[animeId] = {
                 title,
                 episode,
@@ -36,267 +103,243 @@
                 lastUpdated: Date.now()
             };
 
-            // Save back to storage
             chrome.storage.local.set({ animeData }, () => {
                 console.log(`Saved: ${title} - [${episode}], Remaining Time: ${remainingTime}`);
             });
         });
     }
 
+    /**
+     * Processes video player state and updates episode tracking
+     * @param {HTMLElement} videoPlayer - The video player element
+     * @param {HTMLElement} article - The parent article element
+     */
+    function processVideoState(videoPlayer, article) {
+        const playerState = {
+            isPlaying: videoPlayer.classList.contains("vjs-playing") && 
+                       videoPlayer.classList.contains("vjs-has-started"),
+            justPaused: videoPlayer.classList.contains("vjs-paused") && 
+                        videoPlayer.classList.contains("vjs-user-active")
+        };
+
+        if (!playerState.isPlaying && !playerState.justPaused) return;
+
+        const elements = {
+            title: article.querySelector("header h2 a"),
+            remainingTime: article.querySelector(".vjs-remaining-time-display")
+        };
+
+        if (!elements.title || !elements.remainingTime) return;
+
+        const episodeInfo = parseEpisodeInfo(elements.title.textContent.trim(), 
+                                           elements.remainingTime.textContent.trim());
+        if (!episodeInfo) return;
+
+        console.log(`Detected: ${episodeInfo.title} - [${episodeInfo.episode}], Remaining Time: ${episodeInfo.remainingTime}`);
+
+        if (shouldTriggerAutoNext(episodeInfo.remainingSeconds, playerState.justPaused)) {
+            handleAutoNextEpisode(episodeInfo.episode);
+        }
+
+        saveLastWatched(episodeInfo.title, episodeInfo.episode, episodeInfo.remainingTime);
+    }
+
+    /**
+     * Parses episode information from title and remaining time
+     * @returns {Object|null} Episode information or null if invalid
+     */
+    function parseEpisodeInfo(titleText, remainingTime) {
+        const match = titleText.match(/(.+?)\s*\[(\d+)\]/);
+        if (!match) return null;
+
+        const remainingParts = remainingTime.split(':');
+        const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
+
+        return {
+            title: match[1],
+            episode: match[2],
+            remainingTime: remainingTime.trim(),
+            remainingSeconds
+        };
+    }
+
+    /**
+     * Checks if auto-next should be triggered
+     */
+    function shouldTriggerAutoNext(remainingSeconds, justPaused) {
+        return remainingSeconds <= CONSTANTS.AUTO_NEXT_THRESHOLD && 
+               justPaused && 
+               remainingSeconds !== 0;
+    }
+
+    /**
+     * Handles auto-next episode functionality
+     */
+    function handleAutoNextEpisode(currentEpisode) {
+        chrome.storage.local.get(['autoNextEpisode'], function(settings) {
+            if (!settings.autoNextEpisode) return;
+
+            const nextEpisode = String(parseInt(currentEpisode) + 1);
+            const found = findAndPlayNextEpisode(nextEpisode);
+            
+            NotificationUI.showTextNotification(found ? "播放下一集" : "已經冇下集了");
+        });
+    }
+
+    /**
+     * Finds and starts playing the next episode
+     * @returns {boolean} Whether the next episode was found and started
+     */
+    function findAndPlayNextEpisode(nextEpisode) {
+        const articles = document.querySelectorAll("article");
+        
+        for (const article of articles) {
+            const titleElement = article.querySelector("header h2 a");
+            if (!titleElement) continue;
+
+            const match = titleElement.textContent.trim().match(/(.+?)\s*\[(\d+)\]/);
+            if (!match || match[2] !== nextEpisode) continue;
+
+            console.log(`Auto next episode found: ${nextEpisode}`);
+            article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            const videoContainer = article.querySelector(".video-js");
+            if (videoContainer) {
+                videoContainer.click();
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Main episode tracking function
+     */
     function findCurrentEpisode() {
-
-        let articles = document.querySelectorAll("article");
-
-        let titleElement = null;
-        let remainingTimeElement = null;
+        const articles = document.querySelectorAll("article");
         
         articles.forEach(article => {
-            let videoPlayer = article.querySelector(".video-js");
+            const videoPlayer = article.querySelector(".video-js");
             if (!videoPlayer) return;
-    
-            let debouncedCallback = debounce(() => {
-                let isPlaying = (videoPlayer.classList.contains("vjs-playing") && videoPlayer.classList.contains("vjs-has-started"));
-                let justPaused = videoPlayer.classList.contains("vjs-paused") && videoPlayer.classList.contains("vjs-user-active");
 
-                if (isPlaying || justPaused) {
-                    titleElement = article.querySelector("header h2 a");
-                    console.log(titleElement.textContent);
-                    remainingTimeElement = article.querySelector(".vjs-remaining-time-display");
-    
-                    if (titleElement) {
-                        let titleText = titleElement.textContent.trim();
-                        let match = titleText.match(/(.+?)\s*\[(\d+)\]/);
-                        let remainingTime = remainingTimeElement.textContent.trim();
-            
-                        if (match) {
-                            let title = match[1];
-                            let episode = match[2];
-            
-                            console.log(`Detected: ${title} - [${episode}], Remaining Time: ${remainingTime}`);
+            const debouncedCallback = debounce(
+                () => processVideoState(videoPlayer, article), 
+                1000
+            );
 
-                            // Convert remaining time (M:SS format) to seconds
-                            const remainingParts = remainingTime.split(':');
-                            const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
-
-                            // Handle auto next episode
-                            if (remainingSeconds <= 95 && justPaused && remainingSeconds != 0) { // 1:35 in seconds
-                                chrome.storage.local.get(['autoNextEpisode'], function(settings) {
-                                    if (settings.autoNextEpisode) {
-                                        nextEpisode = String(parseInt(episode) + 1);
-                                        const articles = document.querySelectorAll("article");
-                                        let found = false;
-                                        
-                                        // Using for...of instead of forEach to allow breaking
-                                        for (const article of articles) {
-                                            if (found) break;
-
-                                            const titleElement = article.querySelector("header h2 a");
-                                            if (!titleElement) continue;
-
-                                            const match = titleElement.textContent.trim().match(/(.+?)\s*\[(\d+)\]/);
-                                            if (match && match[2] === nextEpisode) {
-                                                console.log(`Auto next episode found: ${nextEpisode}`);
-                                                article.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-                                                // Find and click the video player
-                                                const videoContainer = article.querySelector(".video-js");
-                                                if (videoContainer) {
-                                                    // Click to start loading the video
-                                                    videoContainer.click();
-                                                    showNotificationText("播放下一集");
-                                                    found = true;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        
-                                        if (!found) {
-                                            showNotificationText("已經冇下集了");
-                                        }
-                                    }
-                                });
-                            }
-                            
-                            saveLastWatched(title, episode, remainingTime);
-                        }
-                    }
-                }
-
-
-            }, 1000); 
-    
-            let observer = new MutationObserver(debouncedCallback);
-            observer.observe(videoPlayer, { attributes: true, attributeFilter: ["class"] });
+            const observer = new MutationObserver(debouncedCallback);
+            observer.observe(videoPlayer, { 
+                attributes: true, 
+                attributeFilter: ["class"] 
+            });
         });
-
     }
 
-    function scrollToSavedEpisode() {
-        const urlPath = window.location.pathname;
-        const animeId = urlPath.split('/').filter(segment => segment).pop();
-
-        chrome.storage.local.get('animeData', (result) => {
-            if (!result.animeData || !result.animeData[animeId]) return;
-
-            const savedData = result.animeData[animeId];
-            const savedEpisode = savedData.episode;
-            const savedRemainingTime = savedData.remainingTime;
-            if (savedRemainingTime < 95) {
-                
+    /**
+     * Handles video playback and seeking to saved position
+     */
+    function handleVideoPlayback(videoContainer, savedData) {
+        try {
+            const videoElement = videoContainer.querySelector('video');
+            if (!videoElement) {
+                console.error('Video element not found');
+                return;
             }
 
-            // Find the episode link that matches our saved episode
-            const articles = document.querySelectorAll("article");
-            articles.forEach(article => {
-                const titleElement = article.querySelector("header h2 a");
-                if (!titleElement) return;
-
-                const match = titleElement.textContent.trim().match(/(.+?)\s*\[(\d+)\]/);
-                if (match && match[2] === savedEpisode) {
-                    // Smooth scroll to the element
-                    article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const remainingParts = savedData.remainingTime.split(':');
+            const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
+            
+            const checkDuration = setInterval(() => {
+                const duration = videoElement.duration;
+                if (duration && !isNaN(duration)) {
+                    clearInterval(checkDuration);
+                    const targetTime = Math.max(0, duration - remainingSeconds);
+                    videoElement.currentTime = targetTime;
                     
-                    // Show a notification popup
-                    showNotification(savedData);
-
-                    // Find and click the video player
-                    const videoContainer = article.querySelector(".video-js");
-                    if (videoContainer) {
-                        // Click to start loading the video
-                        videoContainer.click();
-
-                        try {
-                            const videoElement = videoContainer.querySelector('video');
-                            if (!videoElement) {
-                                console.error('Video element not found');
-                                return;
-                            }
-
-                            // Convert remaining time to seconds
-                            const remainingParts = savedData.remainingTime.split(':');
-                            const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
-                            
-                            // Wait for duration to be available
-                            const checkDuration = setInterval(() => {
-                                const duration = videoElement.duration;
-                                if (duration && !isNaN(duration)) {
-                                    clearInterval(checkDuration);
-                                    
-                                    // Calculate the target time
-                                    const targetTime = Math.max(0, duration - remainingSeconds);
-                                    
-                                    // Set the video time
-                                    videoElement.currentTime = targetTime;
-
-                                    console.log(`Seeking to ${targetTime} seconds (${duration} - ${remainingSeconds})`);
-                                    
-                                    // Check autoPlay setting before pausing
-                                    chrome.storage.local.get(['autoPlay'], function(settings) {
-                                        if (!settings.autoPlay) {
-                                            videoElement.pause();
-                                        }
-                                    });
-
-                                }
-                            }, 500); // Check every 500ms
-
-                            // Stop checking after 10 seconds to prevent infinite loop
-                            setTimeout(() => {
-                                clearInterval(checkDuration);
-                            }, 10000);
-
-                        } catch (error) {
-                            console.error('Error setting video time:', error);
+                    chrome.storage.local.get(['autoPlay'], function(settings) {
+                        if (!settings.autoPlay) {
+                            videoElement.pause();
                         }
-                    }
+                    });
                 }
-            });
+            }, CONSTANTS.VIDEO_LOAD_CHECK_INTERVAL);
+
+            setTimeout(() => clearInterval(checkDuration), CONSTANTS.VIDEO_LOAD_TIMEOUT);
+        } catch (error) {
+            console.error('Error setting video time:', error);
+        }
+    }
+
+    /**
+     * Scrolls to and loads the saved episode
+     */
+    function scrollToSavedEpisode() {
+        const animeId = getAnimeIdFromUrl();
+        
+        chrome.storage.local.get('animeData', (result) => {
+            const savedData = result.animeData?.[animeId];
+            if (!savedData) return;
+
+            const article = findEpisodeArticle(savedData.episode);
+            if (!article) return;
+
+            scrollAndPlayEpisode(article, savedData);
         });
     }
 
-    function showNotification(savedData) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            z-index: 9999;
-            font-family: Arial, sans-serif;
-            max-width: 300px;
-        `;
+    /**
+     * Finds the article element for a specific episode
+     */
+    function findEpisodeArticle(targetEpisode) {
+        const articles = document.querySelectorAll("article");
+        
+        return Array.from(articles).find(article => {
+            const titleElement = article.querySelector("header h2 a");
+            if (!titleElement) return false;
 
-        notification.innerHTML = `
-            <div style="margin-bottom: 8px"><strong>你上次睇到:</strong></div>
-            <div>第 ${savedData.episode} 集 </div>
-            <div>剩返 ${savedData.remainingTime}</div>
-        `;
-
-        document.body.appendChild(notification);
-
-        // Remove the notification after 5 seconds
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transition = 'opacity 0.5s ease';
-            setTimeout(() => notification.remove(), 1000);
-        }, 7000);
+            const match = titleElement.textContent.trim().match(/(.+?)\s*\[(\d+)\]/);
+            return match && match[2] === targetEpisode;
+        });
     }
 
-    function showNotificationText(text) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            z-index: 9999;
-            font-family: Arial, sans-serif;
-            max-width: 300px;
-        `;
+    /**
+     * Handles scrolling to and playing an episode
+     */
+    function scrollAndPlayEpisode(article, savedData) {
+        article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        NotificationUI.showEpisodeNotification(savedData);
 
-        notification.innerHTML = `
-            <div style="margin-bottom: 8px"><strong>${text}</strong></div>
-        `;
-
-        document.body.appendChild(notification);
-
-        // Remove the notification after 5 seconds
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transition = 'opacity 0.5s ease';
-            setTimeout(() => notification.remove(), 500);
-        }, 5000);
-    }
-
-    // Call scrollToSavedEpisode when the page loads
-    // Wait for the content to be fully loaded
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', scrollToSavedEpisode);
-    } else {
-        scrollToSavedEpisode();
-    }
-
-    // Run every 2 seconds to check which episode is being watched
-    setInterval(findCurrentEpisode, 2000);
-
-    // Add this message listener near the top of your IIFE
-    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-        if (request.action === "showNotification") {
-            const urlPath = window.location.pathname;
-            const animeId = urlPath.split('/').filter(segment => segment).pop();
-
-            chrome.storage.local.get('animeData', (result) => {
-                if (result.animeData && result.animeData[animeId]) {
-                    showNotification(result.animeData[animeId]);
-                }
-            });
+        const videoContainer = article.querySelector(".video-js");
+        if (videoContainer) {
+            videoContainer.click();
+            handleVideoPlayback(videoContainer, savedData);
         }
-    });
+    }
 
+    // Initialize
+    function initialize() {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', scrollToSavedEpisode);
+        } else {
+            scrollToSavedEpisode();
+        }
+
+        setInterval(findCurrentEpisode, CONSTANTS.CHECK_INTERVAL);
+
+        // Message listener for notifications
+        chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+            if (request.action === "showNotification") {
+                const animeId = getAnimeIdFromUrl();
+                chrome.storage.local.get('animeData', (result) => {
+                    if (result.animeData?.[animeId]) {
+                        NotificationUI.showEpisodeNotification(result.animeData[animeId]);
+                    }
+                });
+            }
+        });
+    }
+
+    // Start the application
+    initialize();
 })();
