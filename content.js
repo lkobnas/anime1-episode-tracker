@@ -1,5 +1,5 @@
 (function () {
-    // Constants
+    // Const
     const CONSTANTS = {
         AUTO_NEXT_THRESHOLD: 95, // seconds
         CHECK_INTERVAL: 2000,    // milliseconds
@@ -9,7 +9,7 @@
         VIDEO_LOAD_TIMEOUT: 10000
     };
 
-    // Utility Functions
+    // debounce function (seems not working)
     function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -23,14 +23,14 @@
     }
 
     /**
-     * Gets anime ID from current URL
-     * @returns {string} The anime ID from the URL path
+     * Gets anime name from current URL
+     * @returns {string} Anime name from the URL
      */
     function getAnimeIdFromUrl() {
         return window.location.pathname.split('/').filter(segment => segment).pop();
     }
 
-    // UI Components
+    // UI
     const NotificationUI = {
         createNotificationElement: (styles) => {
             const notification = document.createElement('div');
@@ -77,7 +77,7 @@
         }
     };
 
-    // State Management
+    // State
     let lastSaved = { title: "", episode: "", remainingTime: "" };
 
     /**
@@ -169,11 +169,11 @@
     function shouldTriggerAutoNext(remainingSeconds, justPaused) {
         return remainingSeconds <= CONSTANTS.AUTO_NEXT_THRESHOLD && 
                justPaused && 
-               remainingSeconds !== 0;
+               remainingSeconds !== 0;  // 0 also means video is loading
     }
 
     /**
-     * Handles auto-next episode functionality
+     * Handles auto-next episode 
      */
     function handleAutoNextEpisode(currentEpisode) {
         chrome.storage.local.get(['autoNextEpisode'], function(settings) {
@@ -182,7 +182,7 @@
             const nextEpisode = String(parseInt(currentEpisode) + 1);
             const found = findAndPlayNextEpisode(nextEpisode);
             
-            NotificationUI.showTextNotification(found ? "播放下一集" : "已經冇下集了");
+            NotificationUI.showTextNotification(found ? "開始下一集" : "冇下集了");
         });
     }
 
@@ -214,7 +214,7 @@
     }
 
     /**
-     * Main episode tracking function
+     * Main function: find current episode
      */
     function findCurrentEpisode() {
         const articles = document.querySelectorAll("article");
