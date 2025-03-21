@@ -52,7 +52,7 @@
         showEpisodeNotification: (savedData) => {
             const notification = NotificationUI.createNotificationElement();
             notification.innerHTML = `
-                <div style="margin-bottom: 8px"><strong>你上次睇到:</strong></div>
+                <div style="margin-bottom: 8px"><strong>上次睇到:</strong></div>
                 <div>第 ${savedData.episode} 集 </div>
                 <div>剩返 ${savedData.remainingTime}</div>
             `;
