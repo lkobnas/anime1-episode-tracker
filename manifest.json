@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "上次睇到邊?",
-    "version": "1.6",
+    "version": "1.7",
     "description": "Anime1.me 集數記錄及自動跳轉\n幫你記住上次睇到邊，自動跳到你上次睇到嘅位",
     "permissions": ["storage"],
     "host_permissions": ["*://anime1.me/*"], 

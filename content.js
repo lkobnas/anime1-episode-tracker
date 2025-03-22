@@ -6,7 +6,9 @@
         NOTIFICATION_DURATION: 7000,
         NOTIFICATION_FADE_DURATION: 1000,
         VIDEO_LOAD_CHECK_INTERVAL: 500,
-        VIDEO_LOAD_TIMEOUT: 10000
+        VIDEO_LOAD_TIMEOUT: 10000,
+        MIN_VALID_REMAINING_TIME: 10, // Minimum valid remaining time in seconds
+        INITIAL_LOAD_DELAY: 3000,     // Delay before starting to track video state
     };
 
     // debounce function (seems not working)
@@ -79,11 +81,26 @@
 
     // State
     let lastSaved = { title: "", episode: "", remainingTime: "" };
+    let isPageVisible = document.visibilityState === 'visible';
+    let isInitialLoad = true;
 
     /**
-     * Saves the last watched episode data
+     * Saves the last watched episode data with validation
      */
     function saveLastWatched(title, episode, remainingTime) {
+        // Don't save if page is not visible or remaining time is invalid
+        if (!isPageVisible || !isValidRemainingTime(remainingTime)) {
+            return;
+        }
+
+        // Convert remaining time to seconds for comparison
+        const remainingSeconds = convertTimeToSeconds(remainingTime);
+        
+        // Don't save if it's the initial load and the remaining time is near the start
+        if (isInitialLoad && remainingSeconds > (videoElement?.duration - CONSTANTS.MIN_VALID_REMAINING_TIME)) {
+            return;
+        }
+
         // Avoid duplicate saves
         if (lastSaved.title === title && 
             lastSaved.episode === episode && 
@@ -96,6 +113,12 @@
 
         chrome.storage.local.get('animeData', (result) => {
             let animeData = result.animeData || {};
+            
+            // Don't overwrite with invalid remaining time
+            if (animeData[animeId] && !isValidRemainingTime(remainingTime)) {
+                return;
+            }
+
             animeData[animeId] = {
                 title,
                 episode,
@@ -107,6 +130,28 @@
                 console.log(`Saved: ${title} - [${episode}], Remaining Time: ${remainingTime}`);
             });
         });
+    }
+
+    /**
+     * Validates remaining time format and value
+     */
+    function isValidRemainingTime(remainingTime) {
+        if (!remainingTime || remainingTime.trim() === '') return false;
+        
+        const seconds = convertTimeToSeconds(remainingTime);
+        return seconds >= CONSTANTS.MIN_VALID_REMAINING_TIME;
+    }
+
+    /**
+     * Converts MM:SS format to seconds
+     */
+    function convertTimeToSeconds(timeString) {
+        const parts = timeString.split(':');
+        if (parts.length !== 2) return 0;
+        
+        const minutes = parseInt(parts[0]) || 0;
+        const seconds = parseInt(parts[1]) || 0;
+        return minutes * 60 + seconds;
     }
 
     /**
@@ -317,15 +362,28 @@
         }
     }
 
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', () => {
+        isPageVisible = document.visibilityState === 'visible';
+        console.log('Page visibility:', isPageVisible);
+    });
+
     // Initialize
     function initialize() {
+        // Set initial load flag
+        isInitialLoad = true;
+
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', scrollToSavedEpisode);
         } else {
             scrollToSavedEpisode();
         }
 
-        setInterval(findCurrentEpisode, CONSTANTS.CHECK_INTERVAL);
+        // Delay the start of episode tracking
+        setTimeout(() => {
+            isInitialLoad = false;
+            setInterval(findCurrentEpisode, CONSTANTS.CHECK_INTERVAL);
+        }, CONSTANTS.INITIAL_LOAD_DELAY);
 
         // Message listener for notifications
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
