@@ -282,44 +282,28 @@
     }
 
     /**
-     * Handles video playback and seeking to saved position
-     */
-    function handleVideoPlayback(videoContainer, savedData) {
-        try {
-            const videoElement = videoContainer.querySelector('video');
-            if (!videoElement) {
-                console.error('Video element not found');
-                return;
-            }
-
-            const remainingParts = savedData.remainingTime.split(':');
-            const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
-            
-            const checkDuration = setInterval(() => {
-                const duration = videoElement.duration;
-                if (duration && !isNaN(duration)) {
-                    clearInterval(checkDuration);
-                    const targetTime = Math.max(0, duration - remainingSeconds);
-                    videoElement.currentTime = targetTime;
-                    
-                    chrome.storage.local.get(['autoPlay'], function(settings) {
-                        if (!settings.autoPlay) {
-                            videoElement.pause();
-                        }
-                    });
-                }
-            }, CONSTANTS.VIDEO_LOAD_CHECK_INTERVAL);
-
-            setTimeout(() => clearInterval(checkDuration), CONSTANTS.VIDEO_LOAD_TIMEOUT);
-        } catch (error) {
-            console.error('Error setting video time:', error);
-        }
-    }
-
-    /**
      * Scrolls to and loads the saved episode
      */
     function scrollToSavedEpisode() {
+        // Don't process if page is not visible
+        if (!isPageVisible) {
+            // Wait for page to become visible
+            document.addEventListener('visibilitychange', function onVisibilityChange() {
+                if (document.visibilityState === 'visible') {
+                    document.removeEventListener('visibilitychange', onVisibilityChange);
+                    performScrollAndSeek();
+                }
+            });
+            return;
+        }
+
+        performScrollAndSeek();
+    }
+
+    /**
+     * Performs the actual scroll and seek operations
+     */
+    function performScrollAndSeek() {
         const animeId = getAnimeIdFromUrl();
         
         chrome.storage.local.get('animeData', (result) => {
@@ -362,27 +346,89 @@
         }
     }
 
-    // Add visibility change listener
+    /**
+     * Handles video playback and seeking to saved position
+     */
+    function handleVideoPlayback(videoContainer, savedData) {
+        // Don't process if page is not visible
+        if (!isPageVisible) return;
+
+        try {
+            const videoElement = videoContainer.querySelector('video');
+            if (!videoElement) {
+                console.error('Video element not found');
+                return;
+            }
+
+            const remainingParts = savedData.remainingTime.split(':');
+            const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
+            
+            // Reset any existing interval
+            if (window.checkDurationInterval) {
+                clearInterval(window.checkDurationInterval);
+            }
+            
+            window.checkDurationInterval = setInterval(() => {
+                const duration = videoElement.duration;
+                if (duration && !isNaN(duration)) {
+                    clearInterval(window.checkDurationInterval);
+                    const targetTime = Math.max(0, duration - remainingSeconds);
+                    videoElement.currentTime = targetTime;
+                    
+                    chrome.storage.local.get(['autoPlay'], function(settings) {
+                        if (!settings.autoPlay) {
+                            videoElement.pause();
+                        }
+                    });
+                }
+            }, CONSTANTS.VIDEO_LOAD_CHECK_INTERVAL);
+
+            setTimeout(() => {
+                if (window.checkDurationInterval) {
+                    clearInterval(window.checkDurationInterval);
+                }
+            }, CONSTANTS.VIDEO_LOAD_TIMEOUT);
+
+        } catch (error) {
+            console.error('Error setting video time:', error);
+        }
+    }
+
+    // Update visibility change listener
     document.addEventListener('visibilitychange', () => {
+        const wasVisible = isPageVisible;
         isPageVisible = document.visibilityState === 'visible';
-        console.log('Page visibility:', isPageVisible);
+        console.log('Page visibility changed:', isPageVisible);
+
+        // If page becomes visible and was previously hidden
+        if (isPageVisible && !wasVisible) {
+            performScrollAndSeek();
+        }
     });
 
-    // Initialize
+    // Update initialize function
     function initialize() {
-        // Set initial load flag
         isInitialLoad = true;
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', scrollToSavedEpisode);
-        } else {
+        // Only start if page is visible
+        if (document.visibilityState === 'visible') {
             scrollToSavedEpisode();
+        } else {
+            // Wait for page to become visible
+            document.addEventListener('visibilitychange', function onVisibilityChange() {
+                if (document.visibilityState === 'visible') {
+                    document.removeEventListener('visibilitychange', onVisibilityChange);
+                    scrollToSavedEpisode();
+                }
+            });
         }
 
         // Delay the start of episode tracking
         setTimeout(() => {
             isInitialLoad = false;
-            setInterval(findCurrentEpisode, CONSTANTS.CHECK_INTERVAL);
+            if (isPageVisible) {
+                setInterval(findCurrentEpisode, CONSTANTS.CHECK_INTERVAL);
+            }
         }, CONSTANTS.INITIAL_LOAD_DELAY);
 
         // Message listener for notifications
