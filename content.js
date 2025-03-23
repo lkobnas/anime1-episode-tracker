@@ -224,7 +224,7 @@
         chrome.storage.local.get(['autoNextEpisode'], function(settings) {
             if (!settings.autoNextEpisode) return;
 
-            const nextEpisode = String(parseInt(currentEpisode) + 1);
+            const nextEpisode = parseInt(currentEpisode) + 1;
             const found = findAndPlayNextEpisode(nextEpisode);
             
             NotificationUI.showTextNotification(found ? "開始下一集" : "冇下集了");
@@ -243,7 +243,7 @@
             if (!titleElement) continue;
 
             const match = titleElement.textContent.trim().match(/(.+?)\s*\[(\d+)\]/);
-            if (!match || match[2] !== nextEpisode) continue;
+            if (!match || parseInt(match[2]) != nextEpisode) continue;
 
             console.log(`Auto next episode found: ${nextEpisode}`);
             article.scrollIntoView({ behavior: 'smooth', block: 'center' });
