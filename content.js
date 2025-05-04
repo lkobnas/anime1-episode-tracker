@@ -164,7 +164,8 @@
             isPlaying: videoPlayer.classList.contains("vjs-playing") && 
                        videoPlayer.classList.contains("vjs-has-started"),
             justPaused: videoPlayer.classList.contains("vjs-paused") && 
-                        videoPlayer.classList.contains("vjs-user-active")
+                        videoPlayer.classList.contains("vjs-user-active"),
+            playerEnded: videoPlayer.classList.contains("vjs-ended")
         };
 
         if (!playerState.isPlaying && !playerState.justPaused) return;
@@ -182,7 +183,7 @@
 
         console.log(`Detected: ${episodeInfo.title} - [${episodeInfo.episode}], Remaining Time: ${episodeInfo.remainingTime}`);
 
-        if (shouldTriggerAutoNext(episodeInfo.remainingSeconds, playerState.justPaused)) {
+        if (shouldTriggerAutoNext(episodeInfo.remainingSeconds, playerState.justPaused, playerState.playerEnded)) {
             handleAutoNextEpisode(episodeInfo.episode);
         }
 
@@ -211,10 +212,10 @@
     /**
      * Checks if auto-next should be triggered
      */
-    function shouldTriggerAutoNext(remainingSeconds, justPaused) {
+    function shouldTriggerAutoNext(remainingSeconds, justPaused, videoHasEnded) {
         return remainingSeconds <= CONSTANTS.AUTO_NEXT_THRESHOLD && 
-               justPaused && 
-               remainingSeconds !== 0;  // 0 also means video is loading
+               ((justPaused && 
+               remainingSeconds !== 0) || videoHasEnded);  // 0 also means video is loading
     }
 
     /**
