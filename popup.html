@@ -16,6 +16,19 @@
         p {
             margin: 5px 0;
         }
+        .clear-button {
+            margin-top: 15px;
+            padding: 5px 10px;
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .clear-button:hover {
+            background-color: #cc0000;
+        }
     </style>
 </head>
 <body>
@@ -33,6 +46,7 @@
             <input type="checkbox" id="autoNextEpisode"> 剩餘時間少於 1:35 時, 按暫停自動播放下一集
         </label>
     </div>
+    <button id="clearData" class="clear-button">清除記錄</button>
     <script src="popup.js"></script>
 </body>
 </html>

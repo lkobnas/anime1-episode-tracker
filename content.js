@@ -167,19 +167,25 @@
                         videoPlayer.classList.contains("vjs-user-active"),
             playerEnded: videoPlayer.classList.contains("vjs-ended")
         };
-
-        if (!playerState.isPlaying && !playerState.justPaused) return;
+        
+        if (!playerState.isPlaying && !playerState.justPaused) {
+            return;
+        }
 
         const elements = {
             title: article.querySelector("header h2 a"),
             remainingTime: article.querySelector(".vjs-remaining-time-display")
         };
 
-        if (!elements.title || !elements.remainingTime) return;
+        if (!elements.title || !elements.remainingTime) {
+            return;
+        }
 
         const episodeInfo = parseEpisodeInfo(elements.title.textContent.trim(), 
                                            elements.remainingTime.textContent.trim());
-        if (!episodeInfo) return;
+        if (!episodeInfo) {
+            return;
+        }
 
         console.log(`Detected: ${episodeInfo.title} - [${episodeInfo.episode}], Remaining Time: ${episodeInfo.remainingTime}`);
 
@@ -265,21 +271,33 @@
     function findCurrentEpisode() {
         const articles = document.querySelectorAll("article");
         
-        articles.forEach(article => {
+        for (const article of articles) {
             const videoPlayer = article.querySelector(".video-js");
-            if (!videoPlayer) return;
+            if (!videoPlayer) continue;
 
-            const debouncedCallback = debounce(
-                () => processVideoState(videoPlayer, article), 
-                1000
-            );
-
-            const observer = new MutationObserver(debouncedCallback);
-            observer.observe(videoPlayer, { 
-                attributes: true, 
-                attributeFilter: ["class"] 
-            });
-        });
+            // Check if this video is playing or paused
+            const isActive = (videoPlayer.classList.contains("vjs-playing") 
+                              //|| videoPlayer.classList.contains("vjs-paused")) 
+                              && videoPlayer.classList.contains("vjs-has-started")
+                              && videoPlayer.classList.contains("vjs-user-active"));
+            
+            
+            if (isActive) {
+                const observer = new MutationObserver((mutations) => {
+                    processVideoState(videoPlayer, article);
+                });
+                observer.observe(videoPlayer, { 
+                    attributes: true, 
+                    attributeFilter: ["class"] 
+                });
+                
+                // Also process the initial state
+                processVideoState(videoPlayer, article);
+                
+                // Break after finding the first active episode
+                break;
+            }
+        }
     }
 
     /**
@@ -399,7 +417,6 @@
     document.addEventListener('visibilitychange', () => {
         const wasVisible = isPageVisible;
         isPageVisible = document.visibilityState === 'visible';
-        console.log('Page visibility changed:', isPageVisible);
 
         // If page becomes visible and was previously hidden
         if (isPageVisible && !wasVisible) {

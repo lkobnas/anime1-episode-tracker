@@ -14,6 +14,26 @@ document.addEventListener("DOMContentLoaded", function () {
         chrome.storage.local.set({ autoNextEpisode: e.target.checked });
     });
 
+    // Add event listener for clear data button
+    document.getElementById('clearData').addEventListener('click', function() {
+        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+            const url = new URL(tabs[0].url);
+            const animeId = url.pathname.split('/').filter(segment => segment).pop();
+
+            chrome.storage.local.get('animeData', (result) => {
+                if (result.animeData && result.animeData[animeId]) {
+                    delete result.animeData[animeId];
+                    chrome.storage.local.set({ animeData: result.animeData }, () => {
+                        // Update the display
+                        document.getElementById("animeTitle").textContent = "No data";
+                        document.getElementById("episodeNumber").textContent = "No data";
+                        document.getElementById("remainingTime").textContent = "No data";
+                    });
+                }
+            });
+        });
+    });
+
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         // Get the current URL and extract the anime ID
         const url = new URL(tabs[0].url);
