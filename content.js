@@ -83,6 +83,7 @@
     let lastSaved = { title: "", episode: "", remainingTime: "" };
     let isPageVisible = document.visibilityState === 'visible';
     let isInitialLoad = true;
+    let hasPerformedInitialScroll = false;
 
     /**
      * Saves the last watched episode data with validation
@@ -311,12 +312,14 @@
                 if (document.visibilityState === 'visible') {
                     document.removeEventListener('visibilitychange', onVisibilityChange);
                     performScrollAndSeek();
+                    hasPerformedInitialScroll = true;
                 }
             });
             return;
         }
 
         performScrollAndSeek();
+        hasPerformedInitialScroll = true;
     }
 
     /**
@@ -332,7 +335,14 @@
             const article = findEpisodeArticle(savedData.episode);
             if (!article) return;
 
-            scrollAndPlayEpisode(article, savedData);
+            const remainingParts = savedData.remainingTime.split(':');
+            const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
+
+
+            if (savedData.remainingSeconds < CONSTANTS.AUTO_NEXT_THRESHOLD)
+                handleAutoNextEpisode(savedData.episode);
+            else
+                scrollAndPlayEpisode(article, savedData);
         });
     }
 
@@ -418,8 +428,8 @@
         const wasVisible = isPageVisible;
         isPageVisible = document.visibilityState === 'visible';
 
-        // If page becomes visible and was previously hidden
-        if (isPageVisible && !wasVisible) {
+        // If page becomes visible and was previously hidden, but only on initial load
+        if (isPageVisible && !wasVisible && !hasPerformedInitialScroll) {
             performScrollAndSeek();
         }
     });
