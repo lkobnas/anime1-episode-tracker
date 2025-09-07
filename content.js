@@ -339,7 +339,7 @@
             const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
 
 
-            if (savedData.remainingSeconds < CONSTANTS.AUTO_NEXT_THRESHOLD)
+            if (remainingSeconds < CONSTANTS.AUTO_NEXT_THRESHOLD)
                 handleAutoNextEpisode(savedData.episode);
             else
                 scrollAndPlayEpisode(article, savedData);
