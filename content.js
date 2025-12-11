@@ -84,6 +84,7 @@
     let isPageVisible = document.visibilityState === 'visible';
     let isInitialLoad = true;
     let hasPerformedInitialScroll = false;
+    let hasPerformedAutoNext = false;
 
     /**
      * Saves the last watched episode data with validation
@@ -166,7 +167,9 @@
                        videoPlayer.classList.contains("vjs-has-started"),
             justPaused: videoPlayer.classList.contains("vjs-paused") && 
                         videoPlayer.classList.contains("vjs-user-active"),
-            playerEnded: videoPlayer.classList.contains("vjs-ended")
+            playerEnded: videoPlayer.classList.contains("vjs-ended"),
+            justSeeking: videoPlayer.classList.contains("vjs-seeking") && 
+                        videoPlayer.classList.contains("vjs-user-active")
         };
         
         if (!playerState.isPlaying && !playerState.justPaused) {
@@ -190,8 +193,8 @@
 
         console.log(`Detected: ${episodeInfo.title} - [${episodeInfo.episode}], Remaining Time: ${episodeInfo.remainingTime}`);
 
-        if (shouldTriggerAutoNext(episodeInfo.remainingSeconds, playerState.justPaused, playerState.playerEnded)) {
-            handleAutoNextEpisode(episodeInfo.episode);
+        if (shouldTriggerAutoNext(episodeInfo.remainingSeconds, playerState.justPaused, playerState.playerEnded, playerState.justSeeking)) {
+            handleAutoNextEpisode(episodeInfo.episode, false);
         }
 
         saveLastWatched(episodeInfo.title, episodeInfo.episode, episodeInfo.remainingTime);
@@ -219,8 +222,8 @@
     /**
      * Checks if auto-next should be triggered
      */
-    function shouldTriggerAutoNext(remainingSeconds, justPaused, videoHasEnded) {
-        return remainingSeconds <= CONSTANTS.AUTO_NEXT_THRESHOLD && 
+    function shouldTriggerAutoNext(remainingSeconds, justPaused, videoHasEnded, justSeeking) {
+        return remainingSeconds <= CONSTANTS.AUTO_NEXT_THRESHOLD && !justSeeking &&
                ((justPaused && 
                remainingSeconds !== 0) || videoHasEnded);  // 0 also means video is loading
     }
@@ -228,14 +231,14 @@
     /**
      * Handles auto-next episode 
      */
-    function handleAutoNextEpisode(currentEpisode) {
+    function handleAutoNextEpisode(currentEpisode, isNewUpdated) {
         chrome.storage.local.get(['autoNextEpisode'], function(settings) {
             if (!settings.autoNextEpisode) return;
 
             const nextEpisode = parseInt(currentEpisode) + 1;
             const found = findAndPlayNextEpisode(nextEpisode);
             
-            NotificationUI.showTextNotification(found ? "開始下一集" : "冇下集了");
+            NotificationUI.showTextNotification(found ? (isNewUpdated ? "更新左有下集喇" : "開始下一集") : "冇下集了");
         });
     }
 
@@ -340,7 +343,7 @@
 
 
             if (remainingSeconds < CONSTANTS.AUTO_NEXT_THRESHOLD)
-                handleAutoNextEpisode(savedData.episode);
+                handleAutoNextEpisode(savedData.episode, true);
             else
                 scrollAndPlayEpisode(article, savedData);
         });
