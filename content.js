@@ -1,7 +1,8 @@
 (function () {
     // Const
     const CONSTANTS = {
-        AUTO_NEXT_THRESHOLD: 95, // seconds
+        AUTO_NEXT_THRESHOLD: 120, // seconds (can be overridden by user setting)
+        AUTO_NEXT_PAUSE_DELAY_MS: 3000, // wait this long after pause before auto-next
         CHECK_INTERVAL: 2000,    // milliseconds
         NOTIFICATION_DURATION: 7000,
         NOTIFICATION_FADE_DURATION: 1000,
@@ -9,6 +10,8 @@
         VIDEO_LOAD_TIMEOUT: 10000,
         MIN_VALID_REMAINING_TIME: 10, // Minimum valid remaining time in seconds
         INITIAL_LOAD_DELAY: 3000,     // Delay before starting to track video state
+        SKIP_SECONDS: 3,              // Arrow right skip duration (can be overridden)
+        SKIP_OPENING_SECONDS: 90,     // Numpad '.' skip duration (opening, can be overridden)
     };
 
     // debounce function (seems not working)
@@ -85,6 +88,64 @@
     let isInitialLoad = true;
     let hasPerformedInitialScroll = false;
     let hasPerformedAutoNext = false;
+    let autoNextCountdownTimeout = null;
+    let autoNextCountdownEpisode = null;
+
+    function resetAutoNextCountdown() {
+        if (autoNextCountdownTimeout) {
+            clearTimeout(autoNextCountdownTimeout);
+            autoNextCountdownTimeout = null;
+        }
+        autoNextCountdownEpisode = null;
+    }
+
+    /**
+     * Finds the currently active video element
+     * @returns {HTMLVideoElement|null}
+     */
+    function getActiveVideoElement() {
+        // Prefer the video that has started and where the user is active
+        const activeContainer =
+            document.querySelector(".video-js.vjs-has-started.vjs-user-active") ||
+            document.querySelector(".video-js.vjs-playing") ||
+            document.querySelector(".video-js.vjs-paused");
+
+        return activeContainer ? activeContainer.querySelector("video") : null;
+    }
+
+    /**
+     * Custom key skips (ArrowRight, ArrowLeft, Numpad '.')
+     */
+    function handleArrowKeySkip(event) {
+        const isRightArrow = event.key === "ArrowRight";
+        const isLeftArrow = event.key === "ArrowLeft";
+        const isNumpadDecimal =
+            event.code === "NumpadDecimal" ||
+            event.key === "Decimal" ||
+            (event.key === "." && event.location === 3);
+
+        if (!isRightArrow && !isNumpadDecimal && !isLeftArrow) return;
+
+        const videoElement = getActiveVideoElement();
+        if (!videoElement) return;
+
+        const beforeTime = videoElement.currentTime || 0;
+
+        // Let the page's own handlers run first, then correct to our desired skip
+        setTimeout(() => {
+            let delta = 0;
+            if (isRightArrow) {
+                delta = CONSTANTS.SKIP_SECONDS;
+            } else if (isLeftArrow) {
+                delta = -CONSTANTS.SKIP_SECONDS;
+            } else if (isNumpadDecimal) {
+                delta = CONSTANTS.SKIP_OPENING_SECONDS;
+            }
+
+            const targetTime = Math.max(0, beforeTime + delta);
+            videoElement.currentTime = targetTime;
+        }, 0);
+    }
 
     /**
      * Saves the last watched episode data with validation
@@ -162,17 +223,14 @@
      * @param {HTMLElement} article - The parent article element
      */
     function processVideoState(videoPlayer, article) {
-        const playerState = {
-            isPlaying: videoPlayer.classList.contains("vjs-playing") && 
-                       videoPlayer.classList.contains("vjs-has-started"),
-            justPaused: videoPlayer.classList.contains("vjs-paused") && 
-                        videoPlayer.classList.contains("vjs-user-active"),
-            playerEnded: videoPlayer.classList.contains("vjs-ended"),
-            justSeeking: videoPlayer.classList.contains("vjs-seeking") && 
-                        videoPlayer.classList.contains("vjs-user-active")
-        };
-        
-        if (!playerState.isPlaying && !playerState.justPaused) {
+        const hasStarted = videoPlayer.classList.contains("vjs-has-started");
+        if (!hasStarted) return;
+
+        const isPlaying = videoPlayer.classList.contains("vjs-playing");
+        const isPaused = videoPlayer.classList.contains("vjs-paused");
+        const playerEnded = videoPlayer.classList.contains("vjs-ended");
+
+        if (!isPlaying && !isPaused && !playerEnded) {
             return;
         }
 
@@ -193,9 +251,7 @@
 
         console.log(`Detected: ${episodeInfo.title} - [${episodeInfo.episode}], Remaining Time: ${episodeInfo.remainingTime}`);
 
-        if (shouldTriggerAutoNext(episodeInfo.remainingSeconds, playerState.justPaused, playerState.playerEnded, playerState.justSeeking)) {
-            handleAutoNextEpisode(episodeInfo.episode, false);
-        }
+        handleAutoNextCountdown(episodeInfo, videoPlayer);
 
         saveLastWatched(episodeInfo.title, episodeInfo.episode, episodeInfo.remainingTime);
     }
@@ -220,12 +276,47 @@
     }
 
     /**
-     * Checks if auto-next should be triggered
+     * Auto-next: when paused with remaining time in threshold, start a fixed delay then go next.
+     * Countdown is only cancelled when playback resumes (no longer paused). Timeout does not re-check conditions.
      */
-    function shouldTriggerAutoNext(remainingSeconds, justPaused, videoHasEnded, justSeeking) {
-        return remainingSeconds <= CONSTANTS.AUTO_NEXT_THRESHOLD && !justSeeking &&
-               ((justPaused && 
-               remainingSeconds !== 0) || videoHasEnded);  // 0 also means video is loading
+    function handleAutoNextCountdown(episodeInfo, videoPlayer) {
+        const isPlaying = videoPlayer.classList.contains("vjs-playing");
+        const isPaused = videoPlayer.classList.contains("vjs-paused");
+        const playerEnded = videoPlayer.classList.contains("vjs-ended");
+
+        if (playerEnded) {
+            resetAutoNextCountdown();
+            handleAutoNextEpisode(episodeInfo.episode, false);
+            return;
+        }
+
+        if (isPlaying) {
+            resetAutoNextCountdown();
+            return;
+        }
+
+        if (!isPaused) {
+            return;
+        }
+
+        const inThreshold =
+            episodeInfo.remainingSeconds <= CONSTANTS.AUTO_NEXT_THRESHOLD &&
+            episodeInfo.remainingSeconds !== 0;
+
+        if (!inThreshold) {
+            return;
+        }
+
+        if (autoNextCountdownTimeout && autoNextCountdownEpisode === episodeInfo.episode) {
+            return;
+        }
+
+        resetAutoNextCountdown();
+        autoNextCountdownEpisode = episodeInfo.episode;
+        autoNextCountdownTimeout = setTimeout(() => {
+            handleAutoNextEpisode(autoNextCountdownEpisode, false);
+            resetAutoNextCountdown();
+        }, CONSTANTS.AUTO_NEXT_PAUSE_DELAY_MS);
     }
 
     /**
@@ -279,11 +370,13 @@
             const videoPlayer = article.querySelector(".video-js");
             if (!videoPlayer) continue;
 
-            // Check if this video is playing or paused
-            const isActive = (videoPlayer.classList.contains("vjs-playing") 
-                              //|| videoPlayer.classList.contains("vjs-paused")) 
-                              && videoPlayer.classList.contains("vjs-has-started")
-                              && videoPlayer.classList.contains("vjs-user-active"));
+            // Track playing (with user active) or paused (mouse idle still counts) so auto-next countdown keeps running
+            const hasStarted = videoPlayer.classList.contains("vjs-has-started");
+            const isActive =
+                hasStarted &&
+                ((videoPlayer.classList.contains("vjs-playing") &&
+                    videoPlayer.classList.contains("vjs-user-active")) ||
+                    videoPlayer.classList.contains("vjs-paused"));
             
             
             if (isActive) {
@@ -426,6 +519,21 @@
         }
     }
 
+    // Apply user-configurable options (override some CONSTANTS)
+    chrome.storage.local.get(['options'], (result) => {
+        const options = result.options || {};
+
+        if (typeof options.autoNextThreshold === 'number' && !isNaN(options.autoNextThreshold)) {
+            CONSTANTS.AUTO_NEXT_THRESHOLD = options.autoNextThreshold;
+        }
+        if (typeof options.skipSeconds === 'number' && !isNaN(options.skipSeconds)) {
+            CONSTANTS.SKIP_SECONDS = options.skipSeconds;
+        }
+        if (typeof options.skipOpeningSeconds === 'number' && !isNaN(options.skipOpeningSeconds)) {
+            CONSTANTS.SKIP_OPENING_SECONDS = options.skipOpeningSeconds;
+        }
+    });
+
     // Update visibility change listener
     document.addEventListener('visibilitychange', () => {
         const wasVisible = isPageVisible;
@@ -473,6 +581,9 @@
                 });
             }
         });
+
+        // Custom keyboard handling: make right arrow skip forward by SKIP_SECONDS
+        document.addEventListener("keydown", handleArrowKeySkip, true);
     }
 
     // Start the application
