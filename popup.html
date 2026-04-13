@@ -4,10 +4,10 @@
 <head>
     <title>Last Watched Episode</title>
     <style>
-        body {
+       body {
             font-family: Arial, sans-serif;
             padding: 10px;
-            width: 200px;
+            width: 260px;
         }
         h2 {
             font-size: 16px;
@@ -29,6 +29,27 @@
         .clear-button:hover {
             background-color: #cc0000;
         }
+        .settings-group {
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        .settings-group label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 4px;
+            gap: 6px;
+        }
+        .settings-group input[type="number"] {
+            width: 70px;
+            padding: 2px 4px;
+            box-sizing: border-box;
+        }
+        .settings-title {
+            margin-top: 12px;
+            font-weight: bold;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
@@ -43,7 +64,23 @@
     </div>
     <div style="margin-top: 5px;">
         <label>
-            <input type="checkbox" id="autoNextEpisode"> 剩餘時間少於 1:30 時, 按暫停自動播放下一集
+            <input type="checkbox" id="autoNextEpisode">
+            剩餘時間少於 <span id="autoNextThresholdText">1:30</span> 時, 按暫停自動播放下一集
+        </label>
+    </div>
+    <div class="settings-title">進階設定 (秒)</div>
+    <div class="settings-group">
+        <label>
+            自動下一集threshold
+            <input type="number" id="autoNextThreshold" min="10" max="600" step="1" />
+        </label>
+        <label>
+            方向鍵快進/後退秒數
+            <input type="number" id="skipSeconds" min="1" max="30" step="1" />
+        </label>
+        <label>
+            按(NumPad .)快進秒數, 用於skip OP
+            <input type="number" id="skipOpeningSeconds" min="5" max="300" step="1" />
         </label>
     </div>
     <button id="clearData" class="clear-button">清除記錄</button>
