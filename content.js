@@ -4,26 +4,39 @@
         AUTO_NEXT_THRESHOLD: 120, // seconds (can be overridden by user setting)
         AUTO_NEXT_PAUSE_DELAY_MS: 3000, // wait this long after pause before auto-next
         CHECK_INTERVAL: 2000,    // milliseconds
+        DETECT_INTERVAL: 500,   // max twice per second
         NOTIFICATION_DURATION: 7000,
         NOTIFICATION_FADE_DURATION: 1000,
         VIDEO_LOAD_CHECK_INTERVAL: 500,
         VIDEO_LOAD_TIMEOUT: 10000,
+        VIDEO_READY_TIMEOUT: 30000,   // Max wait for buffering to finish before tracking
         MIN_VALID_REMAINING_TIME: 10, // Minimum valid remaining time in seconds
-        INITIAL_LOAD_DELAY: 3000,     // Delay before starting to track video state
         SKIP_SECONDS: 3,              // Arrow right skip duration (can be overridden)
         SKIP_OPENING_SECONDS: 90,     // Numpad '.' skip duration (opening, can be overridden)
     };
 
-    // debounce function (seems not working)
-    function debounce(func, wait) {
-        let timeout;
+    // At most once per `wait` ms; trailing call keeps the latest remaining time
+    function throttle(func, wait) {
+        let lastTime = 0;
+        let timeout = null;
         return function executedFunction(...args) {
+            const now = Date.now();
+            const remaining = wait - (now - lastTime);
             const later = () => {
-                clearTimeout(timeout);
-                func(...args);
+                lastTime = Date.now();
+                timeout = null;
+                func.apply(this, args);
             };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
+            if (remaining <= 0) {
+                if (timeout) {
+                    clearTimeout(timeout);
+                    timeout = null;
+                }
+                lastTime = now;
+                func.apply(this, args);
+            } else if (!timeout) {
+                timeout = setTimeout(later, remaining);
+            }
         };
     }
 
@@ -86,6 +99,8 @@
     let lastSaved = { title: "", episode: "", remainingTime: "" };
     let isPageVisible = document.visibilityState === 'visible';
     let isInitialLoad = true;
+    let episodeTrackingStarted = false;
+    let initialSeekComplete = false;
     let hasPerformedInitialScroll = false;
     let hasPerformedAutoNext = false;
     let autoNextCountdownTimeout = null;
@@ -111,6 +126,24 @@
             document.querySelector(".video-js.vjs-paused");
 
         return activeContainer ? activeContainer.querySelector("video") : null;
+    }
+
+    /**
+     * Video.js adds vjs-waiting while the player is buffering.
+     * Remaining time is unreliable until that class is gone.
+     */
+    function isPlayerBuffering(videoPlayer) {
+        return videoPlayer.classList.contains("vjs-waiting");
+    }
+
+    function isPlayerReadyToTrack(videoPlayer) {
+        if (!videoPlayer) return false;
+
+        const hasStarted = videoPlayer.classList.contains("vjs-has-started");
+        const isPlaying = videoPlayer.classList.contains("vjs-playing");
+        const isPaused = videoPlayer.classList.contains("vjs-paused");
+
+        return hasStarted && (isPlaying || isPaused) && !isPlayerBuffering(videoPlayer);
     }
 
     /**
@@ -150,7 +183,7 @@
     /**
      * Saves the last watched episode data with validation
      */
-    function saveLastWatched(title, episode, remainingTime) {
+    function saveLastWatched(title, episode, remainingTime, videoElement) {
         // Don't save if page is not visible or remaining time is invalid
         if (!isPageVisible || !isValidRemainingTime(remainingTime)) {
             return;
@@ -160,7 +193,8 @@
         const remainingSeconds = convertTimeToSeconds(remainingTime);
         
         // Don't save if it's the initial load and the remaining time is near the start
-        if (isInitialLoad && remainingSeconds > (videoElement?.duration - CONSTANTS.MIN_VALID_REMAINING_TIME)) {
+        const duration = videoElement?.duration;
+        if (isInitialLoad && duration && remainingSeconds > (duration - CONSTANTS.MIN_VALID_REMAINING_TIME)) {
             return;
         }
 
@@ -224,7 +258,7 @@
      */
     function processVideoState(videoPlayer, article) {
         const hasStarted = videoPlayer.classList.contains("vjs-has-started");
-        if (!hasStarted) return;
+        if (!hasStarted || isPlayerBuffering(videoPlayer)) return;
 
         const isPlaying = videoPlayer.classList.contains("vjs-playing");
         const isPaused = videoPlayer.classList.contains("vjs-paused");
@@ -253,8 +287,15 @@
 
         handleAutoNextCountdown(episodeInfo, videoPlayer);
 
-        saveLastWatched(episodeInfo.title, episodeInfo.episode, episodeInfo.remainingTime);
+        saveLastWatched(
+            episodeInfo.title,
+            episodeInfo.episode,
+            episodeInfo.remainingTime,
+            videoPlayer.querySelector("video")
+        );
     }
+
+    const processVideoStateThrottled = throttle(processVideoState, CONSTANTS.DETECT_INTERVAL);
 
     /**
      * Parses episode information from title and remaining time
@@ -374,14 +415,15 @@
             const hasStarted = videoPlayer.classList.contains("vjs-has-started");
             const isActive =
                 hasStarted &&
+                !isPlayerBuffering(videoPlayer) &&
                 ((videoPlayer.classList.contains("vjs-playing") &&
                     videoPlayer.classList.contains("vjs-user-active")) ||
                     videoPlayer.classList.contains("vjs-paused"));
             
             
             if (isActive) {
-                const observer = new MutationObserver((mutations) => {
-                    processVideoState(videoPlayer, article);
+                const observer = new MutationObserver(() => {
+                    processVideoStateThrottled(videoPlayer, article);
                 });
                 observer.observe(videoPlayer, { 
                     attributes: true, 
@@ -389,7 +431,7 @@
                 });
                 
                 // Also process the initial state
-                processVideoState(videoPlayer, article);
+                processVideoStateThrottled(videoPlayer, article);
                 
                 // Break after finding the first active episode
                 break;
@@ -426,19 +468,27 @@
         
         chrome.storage.local.get('animeData', (result) => {
             const savedData = result.animeData?.[animeId];
-            if (!savedData) return;
+            if (!savedData) {
+                initialSeekComplete = true;
+                return;
+            }
 
             const article = findEpisodeArticle(savedData.episode);
-            if (!article) return;
+            if (!article) {
+                initialSeekComplete = true;
+                return;
+            }
 
             const remainingParts = savedData.remainingTime.split(':');
             const remainingSeconds = parseInt(remainingParts[0]) * 60 + parseInt(remainingParts[1]);
 
 
-            if (remainingSeconds < CONSTANTS.AUTO_NEXT_THRESHOLD)
+            if (remainingSeconds < CONSTANTS.AUTO_NEXT_THRESHOLD) {
                 handleAutoNextEpisode(savedData.episode, true);
-            else
+                initialSeekComplete = true;
+            } else {
                 scrollAndPlayEpisode(article, savedData);
+            }
         });
     }
 
@@ -468,6 +518,8 @@
         if (videoContainer) {
             videoContainer.click();
             handleVideoPlayback(videoContainer, savedData);
+        } else {
+            initialSeekComplete = true;
         }
     }
 
@@ -476,12 +528,16 @@
      */
     function handleVideoPlayback(videoContainer, savedData) {
         // Don't process if page is not visible
-        if (!isPageVisible) return;
+        if (!isPageVisible) {
+            initialSeekComplete = true;
+            return;
+        }
 
         try {
             const videoElement = videoContainer.querySelector('video');
             if (!videoElement) {
                 console.error('Video element not found');
+                initialSeekComplete = true;
                 return;
             }
 
@@ -499,6 +555,7 @@
                     clearInterval(window.checkDurationInterval);
                     const targetTime = Math.max(0, duration - remainingSeconds);
                     videoElement.currentTime = targetTime;
+                    initialSeekComplete = true;
                     
                     chrome.storage.local.get(['autoPlay'], function(settings) {
                         if (!settings.autoPlay) {
@@ -512,11 +569,61 @@
                 if (window.checkDurationInterval) {
                     clearInterval(window.checkDurationInterval);
                 }
+                initialSeekComplete = true;
             }, CONSTANTS.VIDEO_LOAD_TIMEOUT);
 
         } catch (error) {
             console.error('Error setting video time:', error);
+            initialSeekComplete = true;
         }
+    }
+
+    /**
+     * Start tracking after Video.js leaves vjs-waiting (buffering finished),
+     * instead of a fixed delay that can fire while the player is still loading.
+     */
+    function startEpisodeTracking() {
+        if (episodeTrackingStarted) return;
+        episodeTrackingStarted = true;
+
+        // Let remaining-time display catch up after seek/buffer
+        setTimeout(() => {
+            isInitialLoad = false;
+            if (isPageVisible) {
+                setInterval(findCurrentEpisode, CONSTANTS.CHECK_INTERVAL);
+                findCurrentEpisode();
+            }
+        }, CONSTANTS.VIDEO_LOAD_CHECK_INTERVAL);
+    }
+
+    function waitForVideoReadyThenTrack() {
+        const startTime = Date.now();
+
+        const checkReady = () => {
+            const players = document.querySelectorAll(".video-js");
+            for (const player of players) {
+                if (initialSeekComplete && isPlayerReadyToTrack(player)) {
+                    startEpisodeTracking();
+                    return true;
+                }
+            }
+
+            if (Date.now() - startTime >= CONSTANTS.VIDEO_READY_TIMEOUT) {
+                console.warn('Video ready timeout; starting episode tracking anyway');
+                startEpisodeTracking();
+                return true;
+            }
+
+            return false;
+        };
+
+        if (checkReady()) return;
+
+        const readyInterval = setInterval(() => {
+            if (checkReady()) {
+                clearInterval(readyInterval);
+            }
+        }, CONSTANTS.VIDEO_LOAD_CHECK_INTERVAL);
     }
 
     // Apply user-configurable options (override some CONSTANTS)
@@ -562,13 +669,7 @@
             });
         }
 
-        // Delay the start of episode tracking
-        setTimeout(() => {
-            isInitialLoad = false;
-            if (isPageVisible) {
-                setInterval(findCurrentEpisode, CONSTANTS.CHECK_INTERVAL);
-            }
-        }, CONSTANTS.INITIAL_LOAD_DELAY);
+        waitForVideoReadyThenTrack();
 
         // Message listener for notifications
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
